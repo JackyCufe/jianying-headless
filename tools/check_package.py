@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LOCAL_DIRS = {'.git', 'work', '__pycache__', '.pytest_cache', '.venv'}
 LOCAL_CODEC = 'bridge/jy14_codec_hardened_11_4'
 SUFFIXES = {'.py', '.cpp', '.h', '.json', '.md', '.yaml', '.txt'}
-SPECIAL = {'.gitignore', 'NOTICE', 'LICENSE'}
+SPECIAL = {'.gitattributes', '.gitignore', 'NOTICE', 'LICENSE'}
 # User-approved public IG case derivatives. Never turn this into a general
 # media extension allowance: exact bytes, size and path are release-reviewed.
 PUBLIC_MEDIA = {
@@ -112,6 +112,21 @@ def main():
         if name == Path(LOCAL_CODEC).name and not (ROOT / LOCAL_CODEC).exists():
             continue
         require(digest(ROOT / 'bridge' / name) == expected, 'Runtime IO/codec pin differs: ' + name)
+    # Windows has no compiled codec helper, so its manifest pins the three
+    # bridge modules instead. Both manifests are committed, so both are checked
+    # from every host.
+    windows_manifest_path = ROOT / 'bridge/SOURCE_MANIFEST-windows.json'
+    require(windows_manifest_path.is_file(), 'Windows bridge manifest is missing')
+    support = ROOT / 'engine/platform_support.py'
+    require(digest(windows_manifest_path) == literal(support, 'WINDOWS_IO_MANIFEST_SHA'),
+            'Windows bridge manifest pin differs')
+    windows_manifest = json.loads(windows_manifest_path.read_bytes())
+    require(windows_manifest.get('schema') == 'jianying-headless-bridge-source-windows/v1',
+            'Unexpected Windows bridge manifest schema')
+    require(windows_manifest.get('source_files'), 'Windows bridge manifest records no sources')
+    for name, expected in windows_manifest['source_files'].items():
+        require(Path(name).name == name and digest(ROOT / 'bridge' / name) == expected,
+                'Windows bridge source pin differs: ' + name)
     require(digest(ROOT / 'engine/native-resource-catalog.json') ==
             literal(ROOT / 'engine/native_resources.py', 'CATALOG_SHA'), 'Resource catalog pin differs')
 

@@ -1,0 +1,18 @@
+# Keep checkouts byte-identical across platforms.
+#
+# The Skill entry point (skills/yichen-jianying-edit/scripts/headless_draft.py)
+# and bridge/SOURCE_MANIFEST.json verify components by raw sha256. A Windows
+# checkout with core.autocrlf=true rewrites every LF to CRLF, which changes
+# those hashes and makes `doctor` refuse to run for a reason that has nothing to
+# do with the installation. Forcing LF here keeps the pins valid everywhere.
+* text=auto eol=lf
+
+# Binary assets must never be touched.
+*.png binary
+*.mp4 binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.dll binary
+*.dylib binary
+*.so binary

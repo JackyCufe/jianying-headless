@@ -95,18 +95,28 @@ def check():
 
 
 def parse_source(raw):
-    # Accept Finder's quoted/backslash-escaped drag path without executing it.
+    # Accept a path dragged from the file manager, or shell quoting pasted from
+    # a terminal, without executing anything.
     raw = raw.strip()
     direct = Path(raw).expanduser()
     if direct.is_file():
         return direct.resolve()
-    parts = shlex.split(raw)
-    if len(parts) != 1:
-        raise ValueError('请只拖入一个本地视频文件。')
-    path = Path(parts[0]).expanduser().resolve(strict=True)
-    if not path.is_file():
-        raise ValueError('素材必须是本地文件。')
-    return path
+    # Windows drag-and-drop hands over a double-quoted path. A backslash there is
+    # always a separator and never an escape character, so shell unescaping must
+    # not be applied to it.
+    if len(raw) > 1 and raw[0] == raw[-1] and raw[0] in '"\'':
+        quoted = Path(raw[1:-1]).expanduser()
+        if quoted.is_file():
+            return quoted.resolve()
+    if os.name != 'nt':
+        parts = shlex.split(raw)
+        if len(parts) != 1:
+            raise ValueError('请只拖入一个本地视频文件。')
+        path = Path(parts[0]).expanduser().resolve(strict=True)
+        if not path.is_file():
+            raise ValueError('素材必须是本地文件。')
+        return path
+    raise ValueError('素材必须是本地文件。')
 
 
 def make_plan(source, data, name):
