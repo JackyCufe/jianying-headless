@@ -131,8 +131,10 @@ if os.name == 'nt':  # pragma: no cover - exercised on Windows only
 
     DRAFT_ROOT = _platform.DRAFT_ROOT
     MANIFEST_SHA = _platform.manifest_sha()
-    TIMELINE_FILENAME = _platform.timeline_filename()
+    # Keep imports usable for offline tests on a clean Windows runner. Live
+    # operations call doctor(), which resolves and verifies the installed
+    # profile before a draft is created or written.
+    TIMELINE_FILENAME = _platform.TIMELINE_FILENAME
     doctor = _platform.doctor
     validate_runtime = _platform.validate_runtime
     helper = _platform.helper
-

@@ -59,7 +59,7 @@ def check():
             '已找到' if shutil.which(tool) else '未找到；安装后重新打开终端')
     if supported:
         try:
-            manifest = json.loads((ROOT / 'bridge/SOURCE_MANIFEST.json').read_text())
+            manifest = json.loads((ROOT / 'bridge/SOURCE_MANIFEST.json').read_text(encoding='utf-8'))
             _, toolchain = select_toolchain(manifest['reproduction_environment'])
             add('PASS', '已验工具链', toolchain['compiler'] + ' / SDK ' + toolchain['sdk_version']
                 + ' / linker ' + toolchain['linker'] + '；最终仍须校验编译产物')
@@ -166,14 +166,14 @@ def build(raw):
     work.mkdir(exist_ok=True)
     job = Path(tempfile.mkdtemp(prefix='first-draft-', dir=work))
     plan['name'] = job.name
-    (job / 'plan.json').write_text(json.dumps(plan, ensure_ascii=False, indent=2) + '\n')
+    (job / 'plan.json').write_text(json.dumps(plan, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     for command, extra in (
         ('build', ['--plan', str(job / 'plan.json'), '--out', str(job / 'build')]),
         ('verify-build', ['--build', str(job / 'build')]),
     ):
         result = run([sys.executable, str(ENTRY), command] + extra, timeout=180)
-        (job / (command + '.stdout.log')).write_text(result.stdout)
-        (job / (command + '.stderr.log')).write_text(result.stderr)
+        (job / (command + '.stdout.log')).write_text(result.stdout, encoding='utf-8')
+        (job / (command + '.stderr.log')).write_text(result.stderr, encoding='utf-8')
         if result.returncode:
             raise ValueError('未完成 ' + command + '，日志保留在 ' + str(job) + '\n' + result.stderr)
     if digest(source) != before:
@@ -186,14 +186,14 @@ def build(raw):
     report = {'status': 'build-verified', 'name': plan['name'], 'build': str(job / 'build'),
               'source_unchanged': True, 'draft_registered': False, 'video_exported': False,
               'commands': {key: shlex.join(value) for key, value in commands.items()}}
-    (job / 'next-steps.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+    (job / 'next-steps.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     labels = {'publish': '保存工作并完全退出剪映后，登记到本机首页',
               'verify': '打开播放、保存退出、冷重开检查，再次退出后回读',
               'export': '可选：导出最初构建的快照，不包含后来手工修改'}
     notes = '# ' + plan['name'] + '\n'
     for key, label in labels.items():
         notes += '\n## ' + label + '\n\n```bash\n' + report['commands'][key] + '\n```\n'
-    (job / 'next-steps.md').write_text(notes)
+    (job / 'next-steps.md').write_text(notes, encoding='utf-8')
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print('\n尚未写入剪映首页。保存工作并完全退出剪映后，再复制执行下面这一行：\n' +
           report['commands']['publish'])
