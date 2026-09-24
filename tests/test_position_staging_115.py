@@ -64,6 +64,8 @@ def keyframes_by_segment(timeline):
             for item in track.get('segments', [])}
 
 
+@unittest.skipIf(sys.platform == 'win32',
+                 'macOS 11.5 staging fixture uses macOS font and export paths')
 class PositionStaging115Tests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix='position-staging-115-')
