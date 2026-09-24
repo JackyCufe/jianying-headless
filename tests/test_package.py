@@ -67,12 +67,14 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('Headless component changed', result.stderr)
         self.assertNotIn('AssertionError', result.stderr)
 
+    @unittest.skipIf(io is None, 'Native runtime IO is macOS-only')
     def test_strict_json_rejects_duplicate_nonfinite_and_nonobject(self):
         for raw in (b'{"x":1,"x":2}', b'{"x":NaN}', b'[]', b'{"x":1e999}'):
             with self.subTest(raw=raw), self.assertRaises(io.ApplyError):
                 io._parse_strict_json(raw, 'fixture')
         self.assertEqual(io._parse_strict_json(b'{"x":2}', 'fixture'), {'x': 2})
 
+    @unittest.skipIf(io is None, 'Native runtime IO is macOS-only')
     def test_snapshot_detects_same_length_changed_bytes(self):
         path = self.folder / 'snapshot.json'
         path.write_bytes(b'{"x":1}')
@@ -82,6 +84,7 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaises(io.ApplyError):
             io._revalidate_snapshot(snapshot, 'changed')
 
+    @unittest.skipIf(io is None, 'Native runtime IO is macOS-only')
     def test_snapshot_rejects_symlink(self):
         original = self.folder / 'original'
         original.write_bytes(b'original')
@@ -90,6 +93,7 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaises(io.ApplyError):
             io._snapshot_file(link, 'fixture')
 
+    @unittest.skipIf(os.name == 'nt', 'macOS resource catalog relocation')
     def test_catalog_relocates_paths_without_changing_resource_identity(self):
         original = json.loads((ROOT / 'engine/native-resource-catalog.json').read_bytes())
         with patch.object(resources.Path, 'home', return_value=self.folder):

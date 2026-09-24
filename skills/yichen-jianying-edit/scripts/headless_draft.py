@@ -48,6 +48,10 @@ PINS = {
     'native_export.cpp': 'c60da6c65f5bb7ac733b8f5b619401be3921f9254b953a55903d4e7566156379',
     'headless_runtime.py': 'a2485dcbc3476a42ab2f254fa5024e0589c241b8fb12705d44a1b24515e2783b',
     'blueprint.json': '91f7eddad5bff9af23eb88b53713c180e3e3d4054edd469140cfa9aa56bc1dc9',
+    'windows_portable.py': '707e5f1040ad59384f864e5e2ad41ff2c93853be8c7bd562d44f6fb632d244ca',
+    'windows_export.py': 'b4f20ce94b6ca0a72d5c542bc56ce9fd23a13a09826ba71a34beb99e23474fc8',
+    'ffmpeg_graph.py': 'bc0d897993f9e7c2c5f6c0233a3002c07e235323da20fe0eca2755f1410aa594',
+    'ffmpeg_tools.py': 'c8d0817c57573e0e755f3277466fa13e08bdc588d90471344faaf30438e9992f',
 }
 
 for name, expected in PINS.items():
@@ -57,10 +61,31 @@ for name, expected in PINS.items():
 
 sys.path.insert(0, str(BACKEND))
 entrypoint = 'jy14_headless.py'
-if len(sys.argv) > 1 and sys.argv[1] == 'edit':
+command = sys.argv[1] if len(sys.argv) > 1 else None
+requested = None
+if '--backend' in sys.argv:
+    index = sys.argv.index('--backend')
+    if index + 1 >= len(sys.argv):
+        raise SystemExit('--backend needs a value')
+    requested = sys.argv[index + 1]
+    del sys.argv[index:index + 2]
+if requested not in {None, 'native', 'windows-ffmpeg'}:
+    raise SystemExit('Unsupported backend: ' + requested)
+if command == 'edit':
+    if os.name == 'nt' or requested == 'windows-ffmpeg':
+        raise SystemExit('Native Jianying draft editing is macOS-only')
     entrypoint = 'native_edit.py'
     del sys.argv[1]
-elif len(sys.argv) > 1 and sys.argv[1] == 'export':
-    entrypoint = 'native_export.py'
+elif command == 'export':
+    if os.name == 'nt' and requested != 'windows-ffmpeg':
+        raise SystemExit('Windows native MP4 export is unavailable; use --backend windows-ffmpeg with a portable build')
+    entrypoint = 'windows_export.py' if requested == 'windows-ffmpeg' else 'native_export.py'
     del sys.argv[1]
+elif os.name == 'nt':
+    if requested == 'windows-ffmpeg':
+        if command not in {'doctor', 'build', 'verify-build'}:
+            raise SystemExit('Windows FFmpeg supports only doctor, build and verify-build before export')
+        entrypoint = 'windows_portable.py'
+elif requested == 'windows-ffmpeg':
+    raise SystemExit('Use --backend windows-ffmpeg only for export on macOS')
 runpy.run_path(str(BACKEND / entrypoint), run_name='__main__')
