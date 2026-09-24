@@ -92,11 +92,12 @@ class FirstDraftTests(unittest.TestCase):
         self.assertEqual(len(jobs), 2)
         self.assertTrue(all('publish' not in c and 'export' not in c and 'create' not in c for c in calls))
         for job in jobs:
-            result = json.loads((job / 'next-steps.json').read_text())
+            result = json.loads((job / 'next-steps.json').read_text(encoding='utf-8'))
             self.assertFalse(result['draft_registered'])
             self.assertFalse(result['video_exported'])
             self.assertEqual(start.shlex.split(result['commands']['publish'])[2], 'publish')
-            self.assertIn(result['commands']['export'], (job / 'next-steps.md').read_text())
+            self.assertIn(result['commands']['export'],
+                          (job / 'next-steps.md').read_text(encoding='utf-8'))
         self.assertEqual(self.source.read_bytes(), b'unit test bytes')
 
 
