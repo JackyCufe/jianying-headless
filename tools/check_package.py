@@ -65,6 +65,8 @@ def source_files():
         for name in names:
             path = Path(folder) / name
             relative = path.relative_to(ROOT).as_posix()
+            if relative == '.git':  # Git worktrees store metadata in a file.
+                continue
             if relative == LOCAL_CODEC:
                 continue
             require(path.is_file() and not path.is_symlink(), 'Nonregular source: ' + relative)

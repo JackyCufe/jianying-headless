@@ -15,8 +15,8 @@
   },
   "official_library_distributed": false,
   "source_files": {
-    "windows_codec.py": "d769a66183b1c156a6e9f9fb5a3a79c40ff62a550f3a4d1a9f5092fa1af28c9f",
+    "windows_codec.py": "89d1328a08c98107ae24d11efe576497395f07f3d93b9bcd17d9b381c5d45274",
     "windows_platform.py": "898691df6449ab78f565628084a61a62fd9654f889508eb7aef06820d545f38a",
-    "runtime_io_windows.py": "07db27531c92744363cbfe2e237efbcf34103ecde47eb18203d75dc535f7dda0"
+    "runtime_io_windows.py": "5cae1e31de8ffa6bdfc3a08d6f8a10bc3e132b555244eb931d566f5b4baf12a6"
   }
 }

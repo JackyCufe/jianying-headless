@@ -26,6 +26,7 @@ The ABI assumptions are narrow and are checked at import time:
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import os
 from pathlib import Path
 from typing import Optional
@@ -91,10 +92,18 @@ class MSVCString(ctypes.Structure):
         return value
 
     def to_bytes(self) -> bytes:
+        # Validate the untrusted native result before dereferencing its pointer.
+        # The DLL destructor still owns the result in the caller's finally block.
+        if self.size > MAX_CODEC_OUTPUT_BYTES or self.size > self.capacity:
+            raise CodecUnavailable("draft codec output has an invalid size")
         if self.size == 0:
             return b""
-        if self.capacity >= 16 and self.storage.pointer:
+        if self.capacity >= 16:
+            if not self.storage.pointer:
+                raise CodecUnavailable("draft codec output has a null pointer")
             return ctypes.string_at(self.storage.pointer, self.size)
+        if self.size >= 16:
+            raise CodecUnavailable("draft codec inline output is oversized")
         return bytes(self.storage.inline_buffer[: self.size])
 
 
@@ -186,8 +195,6 @@ class WindowsDraftCodec:
             self._release(result)
         if not plaintext:
             raise CodecUnavailable("draft codec returned empty plaintext")
-        if len(plaintext) > MAX_CODEC_OUTPUT_BYTES:
-            raise CodecUnavailable("draft codec output exceeds the safety limit")
         return plaintext
 
     def encrypt(self, plaintext: bytes) -> bytes:
@@ -223,12 +230,24 @@ _CACHED: dict = {}
 
 
 def codec_for(app_directory: Path) -> WindowsDraftCodec:
-    """Return a process-wide codec bound to ``app_directory``."""
+    """Return a codec bound to the current directory and library bytes."""
 
-    key = str(Path(app_directory).resolve())
+    directory = Path(app_directory).resolve()
+    library = directory / WindowsDraftCodec.LIBRARY_NAME
+    try:
+        hasher = hashlib.sha256()
+        with library.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                hasher.update(chunk)
+    except OSError as exc:
+        raise CodecUnavailable("draft codec library missing: %s" % library) from exc
+    key = (str(directory), hasher.hexdigest())
+    if any(cached_path == key[0] and cached_hash != key[1]
+           for cached_path, cached_hash in _CACHED):
+        raise CodecUnavailable("engine library changed after loading; restart this process")
     existing = _CACHED.get(key)
     if existing is None:
-        existing = WindowsDraftCodec(app_directory)
+        existing = WindowsDraftCodec(directory)
         _CACHED[key] = existing
     return existing
 

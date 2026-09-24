@@ -302,6 +302,9 @@ def doctor():
 
     if IS_WINDOWS:
         installation = _app.discover()
+        if (_io.APP_BUNDLE is not None
+                and _io.APP_BUNDLE.resolve() != installation.directory.resolve()):
+            raise ValueError('JY14_APP_BUNDLE differs from the installation selected by doctor')
         status = _app.review_status(installation)
         if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
             raise ValueError('ffmpeg and ffprobe are required')
@@ -370,7 +373,7 @@ WINDOWS_MANIFEST_NAME = 'SOURCE_MANIFEST-windows.json'
 #: bridge modules that drive the installed engine library. Refresh it only after
 #: reviewing the bridge diff, with
 #: ``tools/runtime_report_windows.py --write-manifest``.
-WINDOWS_IO_MANIFEST_SHA = '1dd772b920b6bd6ab097b87405a4f0997b8adc3fae28bab24899a29b3b0d0f73'
+WINDOWS_IO_MANIFEST_SHA = '5c0f6ae0a174262cb09c094a0bb67ec80cee724debeb2bacacaec4591665f4dd'
 
 
 def validate_bridge_sources():

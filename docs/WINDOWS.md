@@ -120,6 +120,9 @@ python tools/runtime_report_windows.py --verify-codec --write-manifest
 ```
 
 `--verify-codec` 会用真实的密文草稿做一次解密→加密→再解密往返，确认符号可解析且结果一致。
+默认报告只读取版本和文件指纹，不加载 DLL；安装版本或引擎指纹未经审核时，
+即使显式要求 `--verify-codec` 也不会加载 DLL。源码库中的 Windows CI 只跑
+离线回归与封包检查，没有安装剪映，不代表界面打开、播放、保存和冷重开验收。
 
 ## 为什么不能改行尾
 
@@ -133,9 +136,11 @@ python tools/runtime_report_windows.py --verify-codec --write-manifest
 
 ```powershell
 git config core.autocrlf false
-git rm --cached -r .
-git reset --hard
+git ls-files --eol bridge engine
 ```
+
+如果输出仍显示工作区为 `w/crlf`，请先保存自己的未提交改动，
+再在一个新的目录重新检出仓库；不要使用会清除工作区改动的重置命令。
 
 ## 已验证 / 未验证
 

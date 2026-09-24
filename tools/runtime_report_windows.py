@@ -5,9 +5,10 @@
     python tools/runtime_report_windows.py --verify-codec
     python tools/runtime_report_windows.py --write-manifest
 
-The report is the Windows counterpart of the macOS `doctor`: it answers "is
-this installation one the project has reviewed, and can its codec be driven"
-without writing anything. ``--write-manifest`` refreshes
+The default report only inspects files and installation identity; it never
+loads the native engine. An explicit ``--verify-codec`` may load the engine
+only after its version and library hash match a reviewed profile.
+``--write-manifest`` refreshes
 :file:`bridge/SOURCE_MANIFEST-windows.json`, which is the provenance hash that
 build records carry.
 """
@@ -74,16 +75,18 @@ def collect(verify_codec: bool) -> dict:
     checks.append(requirement('ffmpeg and ffprobe available', not missing,
                               'missing: ' + ', '.join(missing) if missing else 'both on PATH'))
 
-    try:
-        codec = windows_codec.codec_for(installation.directory)
-        checks.append(requirement('codec symbols resolve', True,
-                                  'enabled=%s' % bool(codec)))
-    except windows_codec.CodecUnavailable as exc:
-        codec = None
-        checks.append(requirement('codec symbols resolve', False, str(exc)))
-
-    if verify_codec and codec is not None:
-        checks.append(_codec_round_trip(codec, windows_platform.draft_root()))
+    if verify_codec:
+        if not report['review']['reviewed']:
+            checks.append(requirement('codec verification', False,
+                                      'skipped: installation is not reviewed'))
+        else:
+            try:
+                codec = windows_codec.codec_for(installation.directory)
+                checks.append(requirement('codec symbols resolve', True,
+                                          'enabled=%s' % bool(codec)))
+                checks.append(_codec_round_trip(codec, windows_platform.draft_root()))
+            except windows_codec.CodecUnavailable as exc:
+                checks.append(requirement('codec symbols resolve', False, str(exc)))
 
     report['checks'] = checks
     report['capability_notes'] = _capability_notes()
@@ -127,6 +130,8 @@ def write_manifest(report: dict) -> Path:
     installation = report.get('installation')
     if installation is None:
         raise SystemExit('cannot write a manifest without an installation')
+    if not report.get('review', {}).get('reviewed'):
+        raise SystemExit('cannot pin an unreviewed installation')
     # Only bridge/ modules are recorded here. platform_support.py lives in
     # engine/ and is pinned by the Skill entry point instead, which keeps the
     # manifest from having to hash a file that holds the manifest's own pin.

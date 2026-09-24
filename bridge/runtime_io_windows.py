@@ -53,6 +53,7 @@ MAX_METADATA_PLAINTEXT_BYTES = 16 * 1024 * 1024
 FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 TH32CS_SNAPPROCESS = 0x00000002
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+ERROR_NO_MORE_FILES = 18
 
 
 class ApplyError(RuntimeError):
@@ -243,12 +244,18 @@ def _write_atomic(path: Path, content: bytes) -> None:
 # --------------------------------------------------------------------------
 
 def _resolve_app_bundle() -> Path:
-    if APP_BUNDLE is not None and APP_BUNDLE.is_dir():
-        return APP_BUNDLE
-    discovered = windows_platform.discover_app_bundle()
-    if discovered is None:
-        raise ApplyError("no supported JianYing installation was found")
-    return discovered
+    try:
+        installation = windows_platform.discover()
+    except ValueError as exc:
+        raise ApplyError("no JianYing installation was found") from exc
+    # Doctor chooses the newest installation. An override must not redirect
+    # native loading to a different (possibly unreviewed) engine afterward.
+    if APP_BUNDLE is not None and APP_BUNDLE.resolve() != installation.directory.resolve():
+        raise ApplyError("JY14_APP_BUNDLE differs from the installation selected by doctor")
+    review = windows_platform.review_status(installation)
+    if not review["reviewed"]:
+        raise ApplyError("JianYing installation is not reviewed: %s" % review.get("reason"))
+    return installation.directory
 
 
 def _codec():
@@ -310,17 +317,23 @@ def _running_image_names() -> List[str]:
     kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
 
     snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-    if snapshot == INVALID_HANDLE_VALUE:
+    if snapshot in (None, INVALID_HANDLE_VALUE):
         raise ApplyError("cannot verify whether JianYing is closed")
     names: List[str] = []
     try:
         entry = _ProcessEntry32W()
         entry.dwSize = ctypes.sizeof(_ProcessEntry32W)
+        ctypes.set_last_error(0)
         if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
-            return names
+            if ctypes.get_last_error() == ERROR_NO_MORE_FILES:
+                return names
+            raise ApplyError("cannot enumerate running processes")
         while True:
             names.append(entry.szExeFile)
+            ctypes.set_last_error(0)
             if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                if ctypes.get_last_error() != ERROR_NO_MORE_FILES:
+                    raise ApplyError("cannot enumerate running processes")
                 break
     finally:
         kernel32.CloseHandle(snapshot)

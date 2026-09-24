@@ -35,7 +35,7 @@ PINS = {
     'native_fonts.py': 'ddd7b4c1ecd55890bd645c14930f2c5f6687794691c2280daa32673e048da5e6',
     'runtime_profiles.py': '167a04aed44e8801016ffd9f71cb7ac45795ab40b5799c8d99909af56cc93b1e',
     'jy14_headless.py': '8b9b0c71f11699257ef8c3588562513c2fc359583f05223ac25443dae7b75259',
-    'platform_support.py': 'd1d2d0b26dec646c42071b01a6aac8240f9f20cfdbdd39204138a1ea08e529c1',
+    'platform_support.py': '4a73e9a660194eb39b2be829e92a023889bf3a87dff4bde763b200198116851e',
     'native_motion.py': '5d743caaa38c921779166e5663d36f72a0c3fdb130a690ac3942a7adcf62d6c2',
     'native_effects.py': 'c46b2fc9221dd613f220564b752e532f8f3753dd5595aaffc24f41d5236e4e97',
     'native_resources.py': '9bddfbb1cd688cebd69ac49f9bbf63c242522d9666a2ef7b412fe097113f68f2',
