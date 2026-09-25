@@ -31,10 +31,18 @@ WINDOWS_REPORT = ROOT / 'tools/runtime_report_windows.py'
 IS_WINDOWS = os.name == 'nt'
 
 
+def configure_console():
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, 'reconfigure', None)
+        if reconfigure is not None:
+            reconfigure(encoding='utf-8', errors='replace')
+
+
 def run(command, timeout=60):
-    env = dict(os.environ, JIANYING_HEADLESS_ROOT=str(ROOT))
+    env = dict(os.environ, JIANYING_HEADLESS_ROOT=str(ROOT),
+               PYTHONUTF8='1', PYTHONIOENCODING='utf-8')
     return subprocess.run(command, cwd=ROOT, env=env, capture_output=True,
-                          text=True, timeout=timeout)
+                          text=True, encoding='utf-8', errors='replace', timeout=timeout)
 
 
 def digest(path):
@@ -250,6 +258,7 @@ def build(raw):
 
 
 def main():
+    configure_console()
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('check', help='只读检查安装前提，不安装或修改系统')

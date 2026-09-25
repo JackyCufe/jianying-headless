@@ -27,6 +27,16 @@ class FirstDraftTests(unittest.TestCase):
         self.media = {'streams': [{'codec_type': 'video', 'codec_name': 'h264',
             'pix_fmt': 'yuv420p', 'width': 1080, 'height': 1920, 'duration': '6.033333'}]}
 
+    def test_run_forces_utf8_for_python_children(self):
+        completed = subprocess.CompletedProcess(['python'], 0, '', '')
+        with patch.object(start.subprocess, 'run', return_value=completed) as invoked:
+            start.run(['python'])
+        kwargs = invoked.call_args.kwargs
+        self.assertEqual(kwargs['encoding'], 'utf-8')
+        self.assertEqual(kwargs['errors'], 'replace')
+        self.assertEqual(kwargs['env']['PYTHONUTF8'], '1')
+        self.assertEqual(kwargs['env']['PYTHONIOENCODING'], 'utf-8')
+
     def test_drag_paths_and_literal_spaces(self):
         # A path containing a space and a literal quote is accepted verbatim.
         self.assertEqual(start.parse_source(str(self.source)), self.source)
