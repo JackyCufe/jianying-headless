@@ -26,6 +26,8 @@ jobs:
       - name: Exercise Windows first-run diagnostics without JianYing
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
           $output = & python tools/start_here.py check 2>&1
           $code = $LASTEXITCODE
           $text = $output -join [Environment]::NewLine
