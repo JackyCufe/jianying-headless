@@ -23,6 +23,19 @@ jobs:
           python-version: '3.11'
       - name: Validate source package and fixed hashes
         run: python tools/check_package.py
+      - name: Exercise Windows first-run diagnostics without JianYing
+        shell: pwsh
+        run: |
+          $output = & python tools/start_here.py check 2>&1
+          $code = $LASTEXITCODE
+          $text = $output -join [Environment]::NewLine
+          $text
+          if ($code -eq 0) {
+            throw "First-run diagnostics unexpectedly passed without JianYing installed"
+          }
+          if ($text -notmatch "Windows · installation found") {
+            throw "First-run diagnostics did not execute the Windows installation check"
+          }
       - name: Run portable regression suite
         run: python -m unittest discover -s tests -v
       - name: Run portable visual-effect tests
