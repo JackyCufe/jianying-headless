@@ -141,8 +141,12 @@ class FirstDraftTests(unittest.TestCase):
             self.assertFalse(result['draft_registered'])
             self.assertFalse(result['video_exported'])
             self.assertEqual(start.shlex.split(result['commands']['publish'])[2], 'publish')
-            self.assertIn(result['commands']['export'],
-                          (job / 'next-steps.md').read_text(encoding='utf-8'))
+            notes = (job / 'next-steps.md').read_text(encoding='utf-8')
+            if start.IS_WINDOWS:
+                self.assertNotIn('export', result['commands'])
+                self.assertNotIn('可选：导出最初构建的快照', notes)
+            else:
+                self.assertIn(result['commands']['export'], notes)
         self.assertEqual(self.source.read_bytes(), b'unit test bytes')
 
 
