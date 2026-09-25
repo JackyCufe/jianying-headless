@@ -75,7 +75,8 @@ python tools/start_here.py check
 
 `start_here.py check` 是 Windows 的首选一键首检：它会核对剪映安装版本与
 `videoeditor.dll` 指纹、草稿目录、FFmpeg/ffprobe、codec 符号与真实草稿往返，
-随后再运行 `doctor`。它只读，不登记草稿、不修改剪映工程。
+随后再运行 `doctor`。它只读，不登记草稿、不修改剪映工程。全新安装如果尚无任何已有草稿，
+“真实草稿往返”会显示 WARN 而不是阻断；下一步的合成 smoke test 会实际验证新建草稿链路。
 
 首检通过后可以先跑完全不使用用户素材、也不登记首页的合成 smoke test：
 

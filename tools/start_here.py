@@ -84,9 +84,13 @@ def _check_windows(add):
                             installation.get('build', '?'),
                             installation.get('directory', '?')))
     for item in payload.get('checks', []):
-        add('PASS' if item.get('ok') else 'FAIL',
-            'Windows · ' + str(item.get('check', '检查')),
-            str(item.get('detail', '')))
+        detail = str(item.get('detail', ''))
+        level = 'PASS' if item.get('ok') else 'FAIL'
+        if (item.get('check') == 'codec round-trip on a real draft'
+                and detail.startswith('no existing draft available')):
+            level = 'WARN'
+            detail += '；首次安装可继续运行 tools/smoke_test.py 验证新建草稿链路'
+        add(level, 'Windows · ' + str(item.get('check', '检查')), detail)
     doctor = run([sys.executable, str(ENTRY), 'doctor'])
     add('PASS' if doctor.returncode == 0 else 'FAIL', 'doctor',
         '运行检查通过' if doctor.returncode == 0 else
