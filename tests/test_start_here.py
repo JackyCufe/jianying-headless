@@ -79,6 +79,51 @@ class FirstDraftTests(unittest.TestCase):
                 start.build(str(self.source))
         self.assertFalse((self.folder / 'work').exists())
 
+    def test_windows_check_uses_native_runtime_report(self):
+        payload = {
+            'installation': {'version': '11.5.0', 'build': '14471',
+                             'directory': r'C:\JianyingPro\Apps\11.5.0.14471'},
+            'checks': [
+                {'check': 'installation found', 'ok': True, 'detail': '11.5.0.14471'},
+                {'check': 'installation reviewed', 'ok': True, 'detail': 'matches reviewed profile'},
+                {'check': 'draft store exists', 'ok': True, 'detail': r'C:\drafts'},
+                {'check': 'ffmpeg and ffprobe available', 'ok': True, 'detail': 'both on PATH'},
+                {'check': 'codec symbols resolve', 'ok': True, 'detail': 'enabled=True'},
+                {'check': 'codec round-trip on a real draft', 'ok': True, 'detail': 'sample'},
+            ],
+        }
+        calls = []
+
+        def success(command, timeout=60):
+            calls.append(command)
+            if str(start.WINDOWS_REPORT) in command:
+                return subprocess.CompletedProcess(command, 0, json.dumps(payload), '')
+            return subprocess.CompletedProcess(command, 0, '{}', '')
+
+        with patch.object(start, 'IS_WINDOWS', True),              patch.object(start.shutil, 'which', return_value='/tool'),              patch.object(start, 'run', side_effect=success),              contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(start.check(), 0)
+        report_call = next(command for command in calls if str(start.WINDOWS_REPORT) in command)
+        self.assertIn('--verify-codec', report_call)
+        self.assertTrue(any(str(start.ENTRY) in command and 'doctor' in command for command in calls))
+
+    def test_windows_beginner_build_does_not_offer_native_export(self):
+        calls = []
+
+        def success(command, timeout=60):
+            calls.append(command)
+            return subprocess.CompletedProcess(
+                command, 0,
+                json.dumps(self.media) if command[0] == 'ffprobe' else '{}', '')
+
+        output = io.StringIO()
+        with patch.object(start, 'ROOT', self.folder),              patch.object(start, 'IS_WINDOWS', True),              patch.object(start, 'run', side_effect=success),              contextlib.redirect_stdout(output):
+            start.build(str(self.source))
+        job = next((self.folder / 'work').iterdir())
+        result = json.loads((job / 'next-steps.json').read_text(encoding='utf-8'))
+        self.assertNotIn('export', result['commands'])
+        self.assertIn('windows-ffmpeg', output.getvalue())
+        self.assertTrue(all('export' not in command for command in calls))
+
     def test_build_never_publishes_or_exports_and_repeat_is_unique(self):
         calls = []
         def success(command, timeout=60):

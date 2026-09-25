@@ -27,6 +27,8 @@ from build_toolchain import select_toolchain
 
 APP = Path('/Applications/VideoFusion-macOS.app')
 ENTRY = ROOT / 'skills/yichen-jianying-edit/scripts/headless_draft.py'
+WINDOWS_REPORT = ROOT / 'tools/runtime_report_windows.py'
+IS_WINDOWS = os.name == 'nt'
 
 
 def run(command, timeout=60):
@@ -45,18 +47,58 @@ def digest(path):
 
 def check():
     rows = []
+
     def add(level, label, message):
         rows.append({'level': level, 'check': label, 'message': message})
         print(f'[{level}] {label}：{message}')
+
+    add('PASS' if sys.version_info >= (3, 9) else 'FAIL', 'Python', platform.python_version())
+    for tool in ('ffmpeg', 'ffprobe'):
+        add('PASS' if shutil.which(tool) else 'FAIL', tool,
+            '已找到' if shutil.which(tool) else '未找到；安装后重新打开终端')
+    if IS_WINDOWS:
+        _check_windows(add)
+    else:
+        _check_macos(add)
+    failed = any(row['level'] == 'FAIL' for row in rows)
+    print('检查未通过，请先处理 FAIL。' if failed else
+          '基础条件检查通过。WARN 需按说明处理；这不是其他电脑、画面或声音验收。')
+    return 1 if failed else 0
+
+
+def _check_windows(add):
+    add('PASS', '电脑', 'Windows 原生草稿路径已启用；需要 64 位 Windows 10/11')
+    report = run([sys.executable, str(WINDOWS_REPORT), '--verify-codec', '--json'])
+    try:
+        payload = json.loads(report.stdout)
+    except (TypeError, ValueError):
+        payload = None
+    if not isinstance(payload, dict):
+        detail = (report.stderr or report.stdout or 'runtime report 未返回 JSON').strip()
+        add('FAIL', 'Windows 运行时', detail)
+        return
+    installation = payload.get('installation') or {}
+    if installation:
+        add('PASS', '剪映安装',
+            '%s.%s · %s' % (installation.get('version', '?'),
+                            installation.get('build', '?'),
+                            installation.get('directory', '?')))
+    for item in payload.get('checks', []):
+        add('PASS' if item.get('ok') else 'FAIL',
+            'Windows · ' + str(item.get('check', '检查')),
+            str(item.get('detail', '')))
+    doctor = run([sys.executable, str(ENTRY), 'doctor'])
+    add('PASS' if doctor.returncode == 0 else 'FAIL', 'doctor',
+        '运行检查通过' if doctor.returncode == 0 else
+        (doctor.stderr or doctor.stdout or 'doctor 失败').strip())
+
+
+def _check_macos(add):
     supported = platform.system() == 'Darwin' and platform.machine() == 'arm64'
     add('PASS' if supported else 'FAIL', '电脑', '需要 Apple Silicon Mac，终端不能在 Rosetta 模式下运行')
     version = platform.mac_ver()[0]
     modern = bool(version) and int(version.split('.')[0]) >= 26
     add('PASS' if modern else 'FAIL', 'macOS', '当前 ' + (version or '非 macOS') + '；要求 26.0 或以上')
-    add('PASS' if sys.version_info >= (3, 9) else 'FAIL', 'Python', platform.python_version())
-    for tool in ('ffmpeg', 'ffprobe'):
-        add('PASS' if shutil.which(tool) else 'FAIL', tool,
-            '已找到' if shutil.which(tool) else '未找到；安装后重新打开终端')
     if supported:
         try:
             manifest = json.loads((ROOT / 'bridge/SOURCE_MANIFEST.json').read_text(encoding='utf-8'))
@@ -64,7 +106,6 @@ def check():
             add('PASS', '已验工具链', toolchain['compiler'] + ' / SDK ' + toolchain['sdk_version']
                 + ' / linker ' + toolchain['linker'] + '；最终仍须校验编译产物')
         except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-            # An already-verified codec does not need recompilation.
             add('WARN' if (ROOT / 'bridge/jy14_codec_hardened_11_4').is_file() else 'FAIL',
                 '编译工具', str(error))
     try:
@@ -88,11 +129,6 @@ def check():
         ready = False
     add('PASS' if ready else 'WARN', '剪映首页',
         '默认草稿目录已初始化' if ready else '登记首页前需先打开剪映、创建并保存一个空白工程、正常退出；自定义草稿位置暂不支持')
-    failed = any(row['level'] == 'FAIL' for row in rows)
-    print('检查未通过，请先处理 FAIL。' if failed else
-          '基础条件检查通过。WARN 需按说明处理；这不是其他电脑、画面或声音验收。')
-    return 1 if failed else 0
-
 
 def parse_source(raw):
     # Accept a path dragged from the file manager, or shell quoting pasted from
@@ -181,15 +217,17 @@ def build(raw):
     commands = {
         'publish': [sys.executable, str(ENTRY), 'publish', '--build', str(job / 'build'), '--audit', str(job / 'publish-audit')],
         'verify': [sys.executable, str(ENTRY), 'verify', '--build', str(job / 'build'), '--report', str(job / 'after-native-save.json')],
-        'export': [sys.executable, str(ENTRY), 'export', '--build', str(job / 'build'), '--out', str(job / 'export')],
     }
+    if not IS_WINDOWS:
+        commands['export'] = [sys.executable, str(ENTRY), 'export', '--build', str(job / 'build'), '--out', str(job / 'export')]
     report = {'status': 'build-verified', 'name': plan['name'], 'build': str(job / 'build'),
               'source_unchanged': True, 'draft_registered': False, 'video_exported': False,
               'commands': {key: shlex.join(value) for key, value in commands.items()}}
     (job / 'next-steps.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     labels = {'publish': '保存工作并完全退出剪映后，登记到本机首页',
-              'verify': '打开播放、保存退出、冷重开检查，再次退出后回读',
-              'export': '可选：导出最初构建的快照，不包含后来手工修改'}
+              'verify': '打开播放、保存退出、冷重开检查，再次退出后回读'}
+    if 'export' in report['commands']:
+        labels['export'] = '可选：导出最初构建的快照，不包含后来手工修改'
     notes = '# ' + plan['name'] + '\n'
     for key, label in labels.items():
         notes += '\n## ' + label + '\n\n```bash\n' + report['commands'][key] + '\n```\n'
@@ -198,7 +236,11 @@ def build(raw):
     print('\n尚未写入剪映首页。保存工作并完全退出剪映后，再复制执行下面这一行：\n' +
           report['commands']['publish'])
     print('\n打开、播放、保存、退出并冷重开检查后，再次退出剪映，执行：\n' + report['commands']['verify'])
-    print('\n可选：需要 MP4 时导出最初快照（不含后续手工修改）：\n' + report['commands']['export'])
+    if 'export' in report['commands']:
+        print('\n可选：需要 MP4 时导出最初快照（不含后续手工修改）：\n' + report['commands']['export'])
+    else:
+        print('\nWindows 原生剪映 MP4 导出尚未支持。需要 MP4 时请使用独立的 '
+              '--backend windows-ffmpeg 流程；它不包含剪映中后续手工修改。')
     print('\n以上可复制命令也保存在：' + str(job / 'next-steps.md'))
     return 0
 

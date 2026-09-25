@@ -68,10 +68,30 @@ Windows 没有 `fcntl`、扩展属性和 `renameat2`，因此桥接层按平台�
 ## 快速开始
 
 ```powershell
-git clone https://github.com/masfrank/jianying-headless.git
+git -c core.autocrlf=false clone --branch windows-port https://github.com/JackyCufe/jianying-headless.git
 cd jianying-headless
-python skills/yichen-jianying-edit/scripts/headless_draft.py doctor
+python tools/start_here.py check
 ```
+
+`start_here.py check` 是 Windows 的首选一键首检：它会核对剪映安装版本与
+`videoeditor.dll` 指纹、草稿目录、FFmpeg/ffprobe、codec 符号与真实草稿往返，
+随后再运行 `doctor`。它只读，不登记草稿、不修改剪映工程。
+
+首检通过后可以先跑完全不使用用户素材、也不登记首页的合成 smoke test：
+
+```powershell
+python tools/smoke_test.py
+```
+
+如果要验证真实素材到可编辑草稿的路径：
+
+```powershell
+python tools/start_here.py build --source C:\path\to\video.mp4
+```
+
+该命令只生成并校验构建，不写入剪映首页；输出目录中的 `next-steps.md` 会给出后续
+`publish` 与 UI 保存回读命令。Windows 原生剪映 MP4 导出仍未支持，因此这里不会再给出
+误导性的原生 `export` 命令；需要独立 MP4 时使用 `--backend windows-ffmpeg` 流程。
 
 `doctor` 输出中包含 Windows 特有的字段：
 

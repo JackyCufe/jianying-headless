@@ -3,7 +3,7 @@ name: Windows FFmpeg acceptance
 on:
   pull_request:
   push:
-    branches: [feat/windows-ffmpeg-export, windows-support]
+    branches: [feat/windows-ffmpeg-export, windows-support, windows-port]
   workflow_dispatch:
 
 permissions:

@@ -3,7 +3,7 @@ name: Windows portable checks
 on:
   pull_request:
   push:
-    branches: [windows-support]
+    branches: [windows-support, windows-port]
   workflow_dispatch:
 
 permissions:

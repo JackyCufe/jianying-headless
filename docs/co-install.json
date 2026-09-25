@@ -10,8 +10,8 @@
     "license": "Personal study and non-commercial use; commercial use requires the author's written permission."
   },
   "engine": {
-    "repo": "masfrank/jianying-headless",
-    "branch": "windows-support",
+    "repo": "JackyCufe/jianying-headless",
+    "branch": "windows-port",
     "checkout": "<absolute path to the cloned repository>"
   },
   "platforms": {
@@ -26,7 +26,7 @@
     }
   },
   "install_steps": [
-    "Clone the windows-support branch and set core.autocrlf=false, otherwise every sha256 pin fails.",
+    "Clone the windows-port branch with core.autocrlf=false, otherwise every sha256 pin fails.",
     "Copy the whole skills/yichen-jianying-edit directory into the host Skill directory; copying SKILL.md alone is not enough.",
     "Export JIANYING_HEADLESS_ROOT to the absolute checkout path when the Skill lives outside the repository.",
     "Run the doctor command and require status=ok before any native operation."
