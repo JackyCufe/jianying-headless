@@ -18,9 +18,11 @@ custom license does not relicense or restrict the upstream MIT / Apache-2.0 mate
 
 Earlier 11.x project adapters directly used this package to construct text
 objects and inspect media. Those historical adapters and the installed package
-are not included in this preview. The selected current engine does not directly
-import pyJianYingDraft; that observation is not a clean-room originality claim.
-The project history and reference relationship remain acknowledged here.
+are not included in this preview. The experimental Windows single-video draft
+command installs and imports source revision `6bb2d06a713f7b58e1375269daec835a03882086`
+of pyJianYingDraft through its optional requirements file. The selected macOS
+engine does not directly import it. The project history and reference
+relationship remain acknowledged here.
 
 ## jy-draftc macOS sample — MIT
 

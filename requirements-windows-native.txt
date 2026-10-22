@@ -1,0 +1,2 @@
+# The exact source revision used for the Windows 11.5.3 draft prototype.
+pyjianyingdraft @ git+https://github.com/GuanYixuan/pyJianYingDraft.git@6bb2d06a713f7b58e1375269daec835a03882086
