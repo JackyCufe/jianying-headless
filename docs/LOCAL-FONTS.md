@@ -153,3 +153,20 @@ fix is included here or used to claim success for the font acceptance above.
 The newer permanent local installation contains those fixes; its combined test
 results are not attributed to this font-only patch. Different machines, editor
 versions, fonts and real projects still require their own acceptance checks.
+
+## 2026-10-20 acceptance on 11.6.0
+
+A separate acceptance ran on Jianying 11.6.0 (build 13281) with Arial, Arial
+Bold and Georgia from this Mac's own font directory. A new 4-second draft with
+two locally-fonted captions, and an independent copy whose first caption was
+reassigned to Georgia through `set_text_font`, were both registered, opened,
+played, saved, quit, cold reopened and saved again. Both full readbacks pass,
+including the edited copy's: schema `189.0.0`, two font files verified, four
+equal mirrors, the source project unchanged byte for byte. The omitted default
+`speed: 1` above no longer blocks the edited-copy readback on this runtime,
+because the 11.6.0 save defaults are now part of its comparison; 11.5.0 was not
+retested and keeps the result recorded above. The weights and the Georgia serif
+were checked on screen, and Chinese glyphs fell back to a system font because
+these files carry no CJK coverage. Nothing was exported: 11.6.0 still has no
+reviewed native export profile. Evidence is in the ignored
+`work/readback-1160-20261020/` directory.

@@ -23,8 +23,20 @@ class RuntimeProfiles(unittest.TestCase):
         self.assertEqual(profiles.PROFILES['11.4.2'],
                          '632c8ddd09ff4a54f876cd8142eb505055ee26d944199506b230949b7e106bd1')
 
+    def test_exact_1160_fingerprint_matches_official_13281_package(self):
+        self.assertEqual(profiles.PROFILES['11.6.0'],
+                         'a490d9a08b71a2d9af138d24528d3d40d65b37b06911627c53a2915c6cac0754')
+
+    def test_1160_has_draft_resources_but_no_export_abi(self):
+        p=profiles.PROFILE_PREFIX+'11.6.0'
+        self.assertNotIn(p,profiles.EXPORT_PROFILES)
+        self.assertEqual(profiles.RESOURCE_PROFILES,profiles.EXPORT_PROFILES|{p})
+        profiles.validate_resource_profile(p,profiles.RESOURCE_CAPTURE_PROFILE)
+        with self.assertRaises(ValueError):
+            profiles.validate_resource_profile(p,p)
+
     def test_mismatched_hash_build_bundle_and_unknown_version_rejected(self):
-        for version in ('11.5.0','11.4.2'):
+        for version in ('11.6.0','11.5.0','11.4.2'):
             h=profiles.PROFILES[version]
             bad=[(self.info(version),'0'*64)]
             for key,val in [('CFBundleVersion','unexpected'),('CFBundleIdentifier','com.other')]:
@@ -39,12 +51,13 @@ class RuntimeProfiles(unittest.TestCase):
         for v in ('11.5.0','11.4.2'):
             p=profiles.PROFILE_PREFIX+v
             profiles.validate_export_profiles(p,p)
-        for a,b in [('11.4.2','11.5.0'),('11.5.0','11.4.2'),('11.4.0','11.4.0'),('11.5.1','11.5.1')]:
+        for a,b in [('11.4.2','11.5.0'),('11.5.0','11.4.2'),('11.4.0','11.4.0'),('11.5.1','11.5.1'),
+                    ('11.6.0','11.6.0'),('11.5.0','11.6.0'),('11.6.0','11.5.0')]:
             with self.subTest(a=a,b=b),self.assertRaises(ValueError):
                 profiles.validate_export_profiles(profiles.PROFILE_PREFIX+a,profiles.PROFILE_PREFIX+b)
 
     def test_resource_pairing_keeps_capture_provenance(self):
-        for p in profiles.EXPORT_PROFILES:
+        for p in profiles.RESOURCE_PROFILES:
             profiles.validate_resource_profile(p,profiles.RESOURCE_CAPTURE_PROFILE)
         with self.assertRaises(ValueError):
             profiles.validate_resource_profile(profiles.PROFILE_PREFIX+'11.4.0',profiles.RESOURCE_CAPTURE_PROFILE)
@@ -54,13 +67,20 @@ class RuntimeProfiles(unittest.TestCase):
     def test_timeline_schema_is_version_scoped(self):
         old = {'new_version':'185.0.0','version':360000}
         new = {'new_version':'187.0.0','version':360000}
-        for version in ('11.4.0','11.4.2','11.5.0'):
+        newest = {'new_version':'189.0.0','version':360000}
+        for version in ('11.4.0','11.4.2','11.5.0','11.6.0'):
             profiles.validate_timeline_schema(old,profiles.PROFILE_PREFIX+version)
-        profiles.validate_timeline_schema(new,profiles.PROFILE_PREFIX+'11.5.0')
-        for version in ('11.4.0','11.4.2','11.5.1'):
-            with self.assertRaises(ValueError):
+        for version in ('11.5.0','11.6.0'):
+            profiles.validate_timeline_schema(new,profiles.PROFILE_PREFIX+version)
+        profiles.validate_timeline_schema(newest,profiles.PROFILE_PREFIX+'11.6.0')
+        for version in ('11.4.0','11.4.2','11.5.1','11.6.1'):
+            with self.subTest(schema='187',version=version),self.assertRaises(ValueError):
                 profiles.validate_timeline_schema(new,profiles.PROFILE_PREFIX+version)
-        for bad in [dict(new,new_version='188.0.0'),dict(new,version=360001),dict(new,version=360000.0)]:
+        for version in ('11.4.0','11.4.2','11.5.0','11.6.1'):
+            with self.subTest(schema='189',version=version),self.assertRaises(ValueError):
+                profiles.validate_timeline_schema(newest,profiles.PROFILE_PREFIX+version)
+        for bad in [dict(new,new_version='188.0.0'),dict(new,version=360001),dict(new,version=360000.0),
+                    dict(newest,new_version='190.0.0'),dict(newest,version=360001)]:
             with self.assertRaises(ValueError): profiles.validate_timeline_schema(bad)
 
     def test_ui_upgrade_is_reported_without_mutating_evidence(self):
@@ -74,6 +94,25 @@ class RuntimeProfiles(unittest.TestCase):
         with self.assertRaises(ValueError): profiles.saved_schema_upgrade(new,old,runtime)
         with self.assertRaises(ValueError):
             profiles.saved_schema_upgrade(old,dict(new,last_modified_platform={}),runtime)
+
+    def test_1160_ui_upgrades_are_exact(self):
+        runtime=profiles.PROFILE_PREFIX+'11.6.0'
+        saved={'id':'sample','new_version':'189.0.0','version':360000,'last_modified_platform':{'app_version':'11.6.0'}}
+        for source in ('185.0.0','187.0.0'):
+            before={'id':'sample','new_version':source,'version':360000}
+            self.assertEqual(profiles.saved_schema_upgrade(before,saved,runtime),
+                             {'timeline_id':'sample','before':source,'after':'189.0.0'})
+        self.assertIsNone(profiles.saved_schema_upgrade(saved,saved,runtime))
+        old={'id':'sample','new_version':'185.0.0','version':360000}
+        bad=[(old,dict(saved,last_modified_platform={'app_version':'11.5.0'})),
+             (old,dict(saved,new_version='187.0.0',last_modified_platform={'app_version':'11.6.0'})),
+             (saved,dict(old,last_modified_platform={'app_version':'11.6.0'}))]
+        for before,after in bad:
+            with self.subTest(before=before['new_version'],after=after['new_version']),self.assertRaises(ValueError):
+                profiles.saved_schema_upgrade(before,after,runtime)
+        with self.assertRaises(ValueError):
+            profiles.saved_schema_upgrade(old,saved,profiles.PROFILE_PREFIX+'11.5.0')
+        self.assertIn(runtime,profiles.EDIT_PROFILES)
 
 
 if __name__=='__main__':

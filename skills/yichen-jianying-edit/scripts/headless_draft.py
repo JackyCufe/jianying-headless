@@ -33,17 +33,18 @@ PROJECT_ROOT = project_root()
 BACKEND = PROJECT_ROOT / 'engine'
 PINS = {
     'native_fonts.py': 'ddd7b4c1ecd55890bd645c14930f2c5f6687794691c2280daa32673e048da5e6',
-    'runtime_profiles.py': 'f285ddf16d5ad381a9165becc443dd11352663bdb28a1b5d7eccd31b2cd6209e',
-    'jy14_headless.py': '3240e4d6124a7e313e1a7ceb2542752378caefeea8f3349576b84cc9da33ecb9',
+    'runtime_profiles.py': 'b1596599e97b90586ea444280bbca89a0e47bd7d34cc05773f2bcd4314b0e0c1',
+    'jy14_headless.py': '3feb3efeb10173303986609a36b9e173ccd651430acbb6b0cc8e945e4ffc2a9b',
     'native_motion.py': '5d743caaa38c921779166e5663d36f72a0c3fdb130a690ac3942a7adcf62d6c2',
     'native_effects.py': 'c46b2fc9221dd613f220564b752e532f8f3753dd5595aaffc24f41d5236e4e97',
     'native_resources.py': '9bddfbb1cd688cebd69ac49f9bbf63c242522d9666a2ef7b412fe097113f68f2',
     'native_visual_effects.py': '15df7e56cc7d575a552c180e72ec712f136c618d271b2f3ad2d32dd5929e844c',
     'native-resource-catalog.json': '97af2df27463a9183fb1aa8f2ef534b37a644cb196f340fe88fdc50b456abde9',
-    'native_compound.py': 'eb9e7d5544e1726be291912c47a5cc917b80180a231242ca30b7b5aaf68f5bfc',
+    'native_compound.py': '8812dd95b74d0743d38f8329443a252f59c25690b14ed894a2b1e063c4d263dc',
     'compound-blueprint.json': '9cba9435053280abf9072d5eaccb8586c841b11dac6854b32daf9cbdba76af8e',
-    'native_edit.py': '151d2adaa582a6a45dcc9ef7606c1e68ef43110602b264fba7d8fcef2235b36e',
+    'native_edit.py': '8a604cd8b95129ba066da04d984254ea7023f60d314c7b080378c13411403d62',
     'native_export.py': '10191828c86c12396c77be5ac7a39ee712c4b5f1ac341a09f73418eac5d7202d',
+    'ui_export.py': '2d3d6a1812ef3c394e5404294dd5de17f828c3ec3e4548f604dcbff87e51186c',
     'native_export.cpp': 'c60da6c65f5bb7ac733b8f5b619401be3921f9254b953a55903d4e7566156379',
     'headless_runtime.py': '81d75135473eb531688099b45a5a2acf922b4c385a8feaf39f0c92963b46ccca',
     'blueprint.json': '91f7eddad5bff9af23eb88b53713c180e3e3d4054edd469140cfa9aa56bc1dc9',
@@ -79,6 +80,11 @@ elif command == 'export':
     entrypoint = ('windows_export.py'
                   if requested == 'windows-ffmpeg' or (requested is None and os.name == 'nt')
                   else 'native_export.py')
+    del sys.argv[1]
+elif command == 'ui-export':
+    if os.name == 'nt':
+        raise SystemExit('UI export acceptance is macOS-only')
+    entrypoint = 'ui_export.py'
     del sys.argv[1]
 elif os.name == 'nt':
     if command not in {None, '--help', '-h', 'doctor', 'build', 'verify-build'}:

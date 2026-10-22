@@ -52,8 +52,33 @@ python tools\windows_ci_evidence.py
 ~~~
 
 The GitHub workflow uses a normal pull_request event with read-only permissions.
-Its FFmpeg archive is selected by immutable release asset ID and verified by
-SHA-256. Evidence uses the repository's reviewed, redistributable public-media
-fixture; private drafts, account data, system fonts and source paths are not
-uploaded. The public IG case also checks the rendered audio mean level against
-its requested 0.5 gain and retains a path-free `audio-gain.json` report.
+It downloads one reviewed FFmpeg archive by release asset ID, rejects any other
+bytes by exact SHA-256, and fails unless `ffmpeg` and `ffprobe` resolve to that
+archive and report the pinned version. Evidence uses the repository's reviewed,
+redistributable public-media fixture; private drafts, account data, system fonts
+and source paths are not uploaded. The public IG case also checks the rendered
+audio mean level against its requested 0.5 gain and retains a path-free
+`audio-gain.json` report.
+
+### CI FFmpeg source
+
+| Field | Pinned value |
+| --- | --- |
+| Build | gyan.dev FFmpeg 8.1.2 essentials, static x64, GPLv3 (`8.1.2-essentials_build-www.gyan.dev`) |
+| Release | [GyanD/codexffmpeg 8.1.2](https://github.com/GyanD/codexffmpeg/releases/tag/8.1.2), published 2026-06-27 |
+| Asset | `ffmpeg-8.1.2-essentials_build.zip`, asset ID 459500679, 109,728,040 bytes |
+| SHA-256 | `db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec` |
+
+Reviewed on 2026-10-15. The downloaded bytes match both the digest GitHub
+records for the asset and the checksum published by gyan.dev. The archive has
+one top-level folder with `ffmpeg.exe`, `ffprobe.exe`, `ffplay.exe`, license,
+readme, presets and HTML documentation; it has no DLLs, scripts, links or parent
+paths. Both tools are x64 executables whose embedded configuration enables
+libx264, libfreetype, libharfbuzz and libfribidi; the AAC encoder is built in.
+
+The earlier BtbN autobuild pins (assets 574819415 and 583988006, the latter
+FFmpeg n8.1.3) were pruned upstream and now return HTTP 404. gyan.dev has kept
+its versioned GitHub releases since 2020, so CI pins one of those instead. If
+this asset disappears or changes, the job fails closed. Restore identical bytes
+or review a replacement and update this table and the workflow together; never
+remove or loosen the digest check.

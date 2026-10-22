@@ -13,7 +13,11 @@ import time
 import jy14_headless as j
 
 PROFILE = 'jy14-headless-macos-11.4.2'
-SUPPORTED_PROFILES = frozenset((PROFILE, 'jy14-headless-macos-11.5.0'))
+# Runtimes whose compound structures this project will inspect, build and read
+# back offline. This gates structure only. Home registration stays refused on
+# every runtime (require_publishable), and delivering a frozen snapshot still
+# needs an export path, which 11.6.0 does not have headlessly.
+SUPPORTED_PROFILES = frozenset((PROFILE, 'jy14-headless-macos-11.5.0', 'jy14-headless-macos-11.6.0'))
 BLUEPRINT = Path(__file__).with_name('compound-blueprint.json')
 SUBDRAFT_TOKEN = '##_subdraft_placeholder_536E1D01-0D97-4295-AA34-0CC47A957B82_##/'
 SIDECARS = {'draft_file_path': 'draft_content.json', 'draft_cover_path': 'draft_cover.jpg',
@@ -153,15 +157,21 @@ def check_order(expected, actual):
                       'Nested segment order/count changed')
 
 
-def normalize_companion_ids(expected, actual, nested_root=False):
+def normalize_companion_ids(expected, actual, nested_root=False, added_buckets=frozenset()):
     """Match only empty photo audio-companion nodes recreated by native save.
 
     Original and replacement nodes must be uniquely referenced, same kind, and
     entirely default-valued. All other IDs, effect parameters and refs stay strict.
     This only changes a comparison copy, never the live timeline or expected data.
+
+    `added_buckets` additionally tolerates companions of those buckets that the
+    saving runtime creates for a photo segment that had none. Each one must be
+    new, uniquely referenced and entirely default-valued, and removing them must
+    make the segment's remaining reference list line up with the expected one.
+    Callers without observed evidence for that runtime leave this set empty.
     """
     actual_rows = {timeline['id']: timeline for _, timeline in graph(actual)}
-    replacements, changes = {}, []
+    replacements, changes, dropped = {}, [], []
 
     def default_node(bucket, node):
         wanted_type = 'vocal_separation' if bucket == 'vocal_separations' else None
@@ -184,9 +194,23 @@ def normalize_companion_ids(expected, actual, nested_root=False):
                 continue
             new_segment = new_segments.get(old_segment['id'], {})
             old_refs, new_refs = old_segment.get('extra_material_refs', []), new_segment.get('extra_material_refs', [])
-            if len(old_refs) != len(new_refs):
+            # Only a longer saved list can contain an addition. When the lengths
+            # already match, every reference is paired positionally as before, so
+            # a renamed companion is never mistaken for a new one.
+            added = [] if len(new_refs) <= len(old_refs) else [
+                ref for ref in new_refs
+                if ref not in old_index and new_index.get(ref, ('', {}))[0] in added_buckets
+                and default_node(*new_index[ref])
+                and sum(ref in s.get('extra_material_refs', []) for s in new_segments.values()) == 1]
+            kept = [ref for ref in new_refs if ref not in added]
+            if len(old_refs) != len(kept):
                 continue
-            for old_id, new_id in zip(old_refs, new_refs):
+            for ref in added:
+                dropped.append((wanted['id'], old_segment['id'], ref))
+                changes.append({'timeline_id': wanted['id'], 'segment_id': old_segment['id'],
+                                'bucket': new_index[ref][0], 'added_native_id': ref,
+                                'added_by_native_save': True, 'parameters_unchanged_and_default': True})
+            for old_id, new_id in zip(old_refs, kept):
                 if old_id == new_id or old_id not in old_index or new_id not in new_index:
                     continue
                 bucket, old_node = old_index[old_id]
@@ -203,7 +227,19 @@ def normalize_companion_ids(expected, actual, nested_root=False):
                 replacements[new_id] = old_id
                 changes.append({'timeline_id': wanted['id'], 'segment_id': old_segment['id'], 'bucket': bucket,
                                 'expected_id': old_id, 'native_id': new_id, 'parameters_unchanged_and_default': True})
-    return j.remap(deepcopy(actual), replacements), changes
+    compared = j.remap(deepcopy(actual), replacements)
+    # Drop only the tolerated additions from the comparison copy's own reference
+    # list, so the remaining references still compare exactly. The saved draft,
+    # its material nodes and the expected snapshot are never rewritten.
+    for timeline_id, segment_id, ref in dropped:
+        for _, timeline in graph(compared):
+            if timeline['id'] != timeline_id:
+                continue
+            for track in timeline.get('tracks', []):
+                for segment in track.get('segments', []):
+                    if segment['id'] == segment_id and ref in segment.get('extra_material_refs', []):
+                        segment['extra_material_refs'] = [r for r in segment['extra_material_refs'] if r != ref]
+    return compared, changes
 
 
 def all_segments(root):

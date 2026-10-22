@@ -1,5 +1,9 @@
 # Saved fps and speed defaults on Jianying 11.5
 
+This page describes 11.5 only. Jianying 11.6.0 omits more fields and rewrites
+photo companions and curve averages differently; those rules and their separate
+scope are in [the 11.6.0 page](SAVED-DEFAULTS-116.md).
+
 Jianying 11.5 can omit `fps: 30`, speed-material `speed: 1`, and video/audio
 segment `speed: 1` when it saves a draft. `edit verify` previously reported
 these omissions as lost nonempty fields. In the reverse direction, a saved

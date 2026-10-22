@@ -3,7 +3,7 @@
 面向剪映专业版 macOS 的本地自动化工具。通过结构化剪辑计划生成可编辑草稿，
 在独立副本中修改多轨工程，并调用本机剪映引擎导出 MP4。
 
-**主要适配版本：11.5.0 · 兼容版本：11.4.2**
+**主要适配版本：11.5.0 · 兼容版本：11.4.2 · 11.6.0 已支持新建与编辑草稿（不含原生导出）**
 
 **首次使用请从 [从零生成第一个剪映草稿](docs/GETTING-STARTED.md) 开始。**
 教程包含安装前提、环境检查、拖入自己的视频、首页登记、保存重开和常见报错处理。
@@ -44,6 +44,8 @@ Windows 另提供独立的 FFmpeg 路径：从剪辑计划生成已校验的渲�
 Windows 云端使用本仓库公开 IG 案例验证了完整解码、帧数与音量；
 使用方法和限制见 [Windows FFmpeg 导出](docs/windows-ffmpeg.md)。
 
+该独立导出后端由 [@instantgoing](https://github.com/instantgoing) 在 [PR #1](https://github.com/mcncarl/jianying-headless/pull/1) 中贡献。
+
 ## Hypit 协作案例
 
 一个约 **50.23 秒**的 IG 滚动动画教程展示了从 Hypit 到剪映的工程交接。
@@ -76,7 +78,7 @@ Windows 云端使用本仓库公开 IG 案例验证了完整解码、帧数与�
 ## 运行环境
 
 - Apple Silicon Mac，macOS 26.0+；已验证环境为 macOS 26.5.1。
-- 剪映专业版 11.5.0，或兼容配置对应的 11.4.2。
+- 剪映专业版 11.5.0，或兼容配置对应的 11.4.2；11.6.0（官方 build 13281）支持新建草稿（含蒙版、叠化转场、轻微抖动）和编辑已有草稿副本，原生导出与复合片段会被拒绝。
 - Python 3.9+、FFmpeg / ffprobe、Xcode Command Line Tools。
 - 已验证桥接工具链：Apple clang 21.0.0 / macOS SDK 26.5。
 

@@ -18,7 +18,7 @@ import time
 import jy14_headless as j
 import native_compound as compound
 import native_fonts as fonts
-from runtime_profiles import validate_timeline_schema, saved_schema_upgrade
+from runtime_profiles import EDIT_PROFILES, validate_timeline_schema, saved_schema_upgrade
 
 SCHEMA = 'jy14-edit-plan/v1'
 BUILD_SCHEMA = 'jy14-edit-build/v1'
@@ -78,6 +78,8 @@ def mirrors(folder, timeline_id):
 
 def load_source(value):
     runtime = j.nd.doctor()
+    j.require(runtime['runtime_profile'] in EDIT_PROFILES,
+              'Existing-draft editing has no reviewed save profile for this runtime')
     helper = j.nd.helper()
     helper._ensure_editor_closed(True)
     source = source_directory(value)
@@ -603,15 +605,31 @@ def normalize_saved_companions(expected, actual, runtime):
     reviewed_root = (runtime == 'jy14-headless-macos-11.5.0'
                      and expected.get('new_version') == actual.get('new_version') == '187.0.0'
                      and actual.get('last_modified_platform', {}).get('app_version') == '11.5.0')
-    return compound.normalize_companion_ids(expected, actual, nested_root=reviewed_root)
+    # 2026-10-20 on 11.6.0: every save of a photo segment rewrites both of its
+    # empty companions, and a 185 source that carried no loudness companion gains
+    # one. Keyed on the saving runtime and its own save stamp, observed with 185
+    # and 189 sources; the added-companion tolerance stays off for 11.5.0, which
+    # was not retested here.
+    added_buckets = frozenset()
+    if (runtime == 'jy14-headless-macos-11.6.0' and actual.get('new_version') == '189.0.0'
+            and actual.get('last_modified_platform', {}).get('app_version') == '11.6.0'):
+        reviewed_root, added_buckets = True, frozenset(('loudnesses',))
+    return compound.normalize_companion_ids(expected, actual, nested_root=reviewed_root,
+                                            added_buckets=added_buckets)
+
+
+# Same-version re-saves observed to restamp device fields: runtime -> (schema, app version).
+SAVED_PROVENANCE = {'jy14-headless-macos-11.5.0': ('187.0.0', '11.5.0'),
+                    'jy14-headless-macos-11.6.0': ('189.0.0', '11.6.0')}
 
 
 def normalize_saved_provenance(before, after, runtime):
     old = before.get('last_modified_platform', {})
     new = after.get('last_modified_platform', {})
-    if not (runtime == 'jy14-headless-macos-11.5.0'
-            and before.get('new_version') == after.get('new_version') == '187.0.0'
-            and old.get('app_version') == new.get('app_version') == '11.5.0'):
+    schema, app_version = SAVED_PROVENANCE.get(runtime, (None, None))
+    if not (schema is not None
+            and before.get('new_version') == after.get('new_version') == schema
+            and old.get('app_version') == new.get('app_version') == app_version):
         return []
     changed = []
     for key in ('device_id', 'hard_disk_id', 'mac_address'):
@@ -624,10 +642,18 @@ def normalize_saved_provenance(before, after, runtime):
     return changed
 
 
+# Runtimes with actual UI save evidence for omitted defaults, and the extra
+# per-segment defaults each one was observed to omit. 11.5 omits fps and speed;
+# 11.6 was additionally observed dropping a unit segment volume on video, photo
+# and audio segments. Runtimes outside this table keep the upstream comparison.
+NATIVE_DEFAULT_RUNTIMES = {'jy14-headless-macos-11.5.0': frozenset(),
+                           'jy14-headless-macos-11.6.0': frozenset(('volume',))}
+
+
 def compare_saved_timeline(expected, actual, runtime_profile, *, frame_tolerance=0, quantized=None):
     """Compare native save output with explicit, validated timeline context.
 
-    Only 11.5 interprets absent fps/speed as native defaults. Walk real compound
+    Only reviewed runtimes interpret absent fps/speed as native defaults. Walk real compound
     timelines in comparison copies; similarly named plugin data stays strict.
     Normalize both sides so an omitted expected default cannot hide a new value.
     Check known speed contexts in both directions; new modes/curves are not
@@ -641,7 +667,8 @@ def compare_saved_timeline(expected, actual, runtime_profile, *, frame_tolerance
         rows = compound.validate(value, basic_validation)
         for _, timeline in rows:
             validate_timeline_schema(timeline, runtime_profile)
-        if runtime_profile != 'jy14-headless-macos-11.5.0':
+        segment_defaults = NATIVE_DEFAULT_RUNTIMES.get(runtime_profile)
+        if segment_defaults is None:
             return value, {}
 
         speed_contexts = {}
@@ -674,6 +701,15 @@ def compare_saved_timeline(expected, actual, runtime_profile, *, frame_tolerance
             return (points[0]['x'] == 0 and points[-1]['x'] == 1
                     and all(a['x'] < b['x'] for a, b in zip(points, points[1:])))
 
+        def volume_default(node):
+            # Zero is a real muted value, so this cannot reuse the positive
+            # speed helper. Booleans stay excluded by the exact type check.
+            if 'volume' not in node:
+                node['volume'] = 1
+            else:
+                j.require(type(node['volume']) in (int, float) and math.isfinite(node['volume'])
+                          and node['volume'] >= 0, 'Invalid native saved volume')
+
         def speed_default(node, supported):
             # Unsupported contexts may retain explicit speeds, but missing
             # values must not acquire an unverified meaning in either direction.
@@ -697,6 +733,8 @@ def compare_saved_timeline(expected, actual, runtime_profile, *, frame_tolerance
                         owners.setdefault(ref, []).append(supported)
                     if bucket is not None and index[segment['material_id']][0] == bucket:
                         speed_default(segment, supported)
+                        if 'volume' in segment_defaults:
+                            volume_default(segment)
             for node in timeline.get('materials', {}).get('speeds', []):
                 if node.get('type') == 'speed':
                     contexts = owners.get(node['id'], [])
@@ -717,8 +755,16 @@ def compare_saved_timeline(expected, actual, runtime_profile, *, frame_tolerance
     preserved(before, after, frame_tolerance=frame_tolerance, quantized=quantized)
 
 
+# Runtimes observed recalculating a custom-curve average on first save, with the
+# saved schema, save stamp and the duration each one divided the source by:
+# 11.5 used the stored target duration; 11.6 used that duration floored onto the
+# frame grid, which differs only when the stored target is microseconds off it.
+CURVE_AVERAGE_RUNTIMES = {'jy14-headless-macos-11.5.0': ('187.0.0', '11.5.0', 'target'),
+                          'jy14-headless-macos-11.6.0': ('189.0.0', '11.6.0', 'frame-floor')}
+
+
 def normalize_saved_curve_averages(expected, actual, runtime):
-    """Recognize the observed 11.5 custom-curve frame rounding on a copy.
+    """Recognize the observed native custom-curve frame rounding on a copy.
 
     Both headless and native-UI copies recalculate the linked segment/material
     average to source duration / frame-aligned target duration on first save.
@@ -727,10 +773,11 @@ def normalize_saved_curve_averages(expected, actual, runtime):
     the generic preservation comparator.
     """
     compared, changes = deepcopy(actual), []
-    if not (runtime == 'jy14-headless-macos-11.5.0'
-            and expected.get('new_version') == actual.get('new_version') == '187.0.0'
-            and expected.get('last_modified_platform', {}).get('app_version') == '11.5.0'
-            and actual.get('last_modified_platform', {}).get('app_version') == '11.5.0'
+    schema, app_version, reference = CURVE_AVERAGE_RUNTIMES.get(runtime, (None, None, None))
+    if not (schema is not None
+            and expected.get('new_version') == actual.get('new_version') == schema
+            and expected.get('last_modified_platform', {}).get('app_version') == app_version
+            and actual.get('last_modified_platform', {}).get('app_version') == app_version
             and expected.get('fps', 30) == actual.get('fps', 30) == 30
             and not expected.get('materials', {}).get('drafts')
             and not actual.get('materials', {}).get('drafts')):
@@ -804,8 +851,14 @@ def normalize_saved_curve_averages(expected, actual, runtime):
         target_us = old.get('target_timerange', {}).get('duration')
         if not (type(source_us) is int and source_us > 0
                 and type(target_us) is int and target_us > 0
-                and abs(target_us - round(target_us / frame_us) * frame_us) <= 1
-                and math.isclose(new_speed, source_us / target_us, rel_tol=1e-12, abs_tol=1e-12)):
+                and abs(target_us - round(target_us / frame_us) * frame_us) <= 1):
+            continue
+        # The divisor is the runtime's own frame reference, never a value chosen
+        # to make a mismatch pass: 11.5 divided by the stored target duration,
+        # 11.6 by that duration floored onto the 30 fps grid.
+        reference_us = target_us if reference == 'target' else round(target_us / frame_us) * 1_000_000 // 30
+        if not (reference_us > 0
+                and math.isclose(new_speed, source_us / reference_us, rel_tol=1e-12, abs_tol=1e-12)):
             continue
         rounding_us = source_us / old_speed - target_us
         if not 0 < rounding_us < frame_us:
@@ -814,7 +867,7 @@ def normalize_saved_curve_averages(expected, actual, runtime):
         changes.append({'timeline_id': expected['id'], 'segment_id': sid, 'speed_material_id': ref,
                         'expected_speed': old_speed, 'native_speed': new_speed,
                         'source_duration_us': source_us, 'target_duration_us': target_us,
-                        'frame_rounding_us': rounding_us})
+                        'reference_duration_us': reference_us, 'frame_rounding_us': rounding_us})
     return compared, changes
 
 
@@ -835,7 +888,9 @@ def verify_live(out):
     expected = j.read_json(out / 'expected-timeline.json')
     compound.validate(actual, basic_validation)
     runtime = j.nd.doctor()['runtime_profile']
-    compared, companion_identity_changes = normalize_saved_companions(expected, actual, runtime)
+    compared, companion_rows = normalize_saved_companions(expected, actual, runtime)
+    companion_identity_changes = [row for row in companion_rows if 'expected_id' in row]
+    companion_additions = [row for row in companion_rows if 'expected_id' not in row]
     schema_upgrades = []
     provenance_restamps = []
     compared_nodes = {node['id']: node for _, node in compound.graph(compared)}
@@ -903,6 +958,7 @@ def verify_live(out):
             'preserved_fields_verified': True, 'four_mirrors_equal': True, 'video_exported': False,
             'nested_timelines': len(checked_compounds), 'compound_sidecars_verified': checked_compounds,
             'native_empty_companion_identity_changes': companion_identity_changes,
+            'native_empty_companion_additions': companion_additions,
             'native_schema_upgrades': schema_upgrades,
             'native_provenance_restamps': provenance_restamps,
             'native_curve_speed_recomputations': curve_average_changes,

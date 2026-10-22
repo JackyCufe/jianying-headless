@@ -8,6 +8,7 @@ step. All times in the plan are integer microseconds.
 import argparse
 from copy import deepcopy
 import ctypes
+import errno
 import hashlib
 import json
 import math
@@ -56,6 +57,18 @@ def write(path, data):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with path.open('xb') as stream:
         os.chmod(path, 0o600)
+        stream.write(data if isinstance(data, bytes) else nd.packed(data))
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def rewrite(path, data, forbidden=None):
+    """Overwrite a freshly cloned file in place; never a link, a shared inode or the original index."""
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_NOFOLLOW), 'wb') as stream:
+        info = os.fstat(stream.fileno())
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and (info.st_dev, info.st_ino) != forbidden,
+                'Prepared home index is not a private regular file')
+        stream.truncate(0)
         stream.write(data if isinstance(data, bytes) else nd.packed(data))
         stream.flush()
         os.fsync(stream.fileno())
@@ -605,6 +618,18 @@ def exclusive_rename(src, dst):
         raise OSError(error, os.strerror(error), str(dst))
 
 
+CLONE_NOFOLLOW = 0x0001  # <sys/clonefile.h>: a symlink source is cloned as a link, never followed
+
+
+def clonefile(source, destination):
+    libc = ctypes.CDLL(None, use_errno=True)
+    fn = libc.clonefile
+    fn.argtypes, fn.restype = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint], ctypes.c_int
+    if fn(os.fsencode(source), os.fsencode(destination), CLONE_NOFOLLOW):
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(destination))
+
+
 def index_entry(metadata, target):
     entry = {k: deepcopy(v) for k, v in metadata.items() if k.startswith(('draft_', 'tm_', 'cloud_', 'pippit_'))
              and k not in {'draft_materials', 'draft_materials_copied_info', 'draft_segment_extra_info',
@@ -659,7 +684,7 @@ def publish(out, audit, resume=False, verify_build_fn=None, verify_live_fn=None)
     audit = nd.fresh_directory(audit)
     lock, identity = h._acquire_directory_transaction_lock(nd.DRAFT_ROOT, 'headless draft root')
     phase = 'locked'
-    temporary = stage = None
+    temporary = stage = prepared_via = None
     try:
         root = h._snapshot_file(nd.DRAFT_ROOT / 'root_meta_info.json', 'home index')
         original = h._parse_strict_json(root.content, 'home index')
@@ -683,12 +708,28 @@ def publish(out, audit, resume=False, verify_build_fn=None, verify_live_fn=None)
         updated['draft_ids'] = integer(original['draft_ids'], 'draft_ids') + 1
         payload = nd.packed(updated)
         temporary = root.path.parent / ('.root_meta_info.headless-' + uuid.uuid4().hex + '.tmp')
-        write(temporary, payload)
+        try:
+            # Observed on affected macOS 27 hosts (Issue #5 reports and a maintainer
+            # reproduction): files created directly in the draft root gained
+            # com.apple.macl, while a copy-on-write clone of the original index kept
+            # its attribute set. The attribute gate below is unchanged either way.
+            clonefile(root.path, temporary)
+        except OSError as error:
+            # Fall back only when cloning is unsupported (e.g. non-APFS); any
+            # other error must not be silently retried as a plain create.
+            if error.errno != errno.ENOTSUP:
+                raise
+            prepared_via = 'create'
+            write(temporary, payload)
+        else:
+            prepared_via = 'clonefile'
+            rewrite(temporary, payload, forbidden=(root.device, root.inode))
         os.chmod(temporary, root.mode)
         staged_xattrs, os_attribute_changes = copy_xattrs(xattrs, temporary, audit)
         phase = 'index_prepared'
         write(audit / 'prepared.json', {'temporary_index': str(temporary), 'target': str(target),
-                                      'index_sha256': nd.digest(temporary), 'resumed': resume})
+                                      'index_sha256': nd.digest(temporary), 'resumed': resume,
+                                      'prepared_via': prepared_via})
         if not resume:
             stage = nd.DRAFT_ROOT / ('.jy14-headless-' + uuid.uuid4().hex)
             shutil.copytree(out / 'draft', stage, copy_function=shutil.copy2)
@@ -729,13 +770,15 @@ def publish(out, audit, resume=False, verify_build_fn=None, verify_live_fn=None)
                    'index_replaced': phase == 'index_replaced', 'target': str(target),
                    'index_already_registered': phase == 'index_already_registered',
                    'temporary_index': str(temporary) if temporary else None,
+                   'prepared_via': prepared_via,
                    'staged_draft': str(stage) if stage else None,
                    'recovery': recovery, 'error': str(error), 'files_deleted': False}
         try:
             write(audit / 'failure.json', failure)
         except OSError:
             pass  # Keep the original failure; do not mask it with audit IO.
-        raise ValueError('Publish failed at ' + phase + ': ' + str(error)
+        prepared = ' (temporary index prepared via ' + prepared_via + ')' if prepared_via else ''
+        raise ValueError('Publish failed at ' + phase + prepared + ': ' + str(error)
                          + '. Retained audit: ' + str(audit) + '; next: ' + recovery) from error
     finally:
         h._release_directory_transaction_lock(lock)
